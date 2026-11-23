@@ -1,6 +1,7 @@
 node_modules/
 dist/
 .tmp/
+artifacts/
 playwright-report/
 test-results/
 .env.local
