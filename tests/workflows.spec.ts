@@ -146,7 +146,7 @@ test('serializes competing orders from two tabs against the same balance', async
   for (const tab of [page, second]) await expect(tab.locator('.cash-pill dd')).toHaveText(money(account.cash))
 })
 
-test('fires multiple alerts on the same crossing, suppresses deleted alerts, and persists triggered state', async ({ page }) => {
+test('fires simultaneous alerts once across tabs, suppresses deleted alerts, and persists triggered state', async ({ page, context }) => {
   await freeze(page)
   await page.goto('/#alerts')
   await expect(page.getByRole('heading', { name: 'Price alerts' })).toBeVisible()
@@ -175,12 +175,17 @@ test('fires multiple alerts on the same crossing, suppresses deleted alerts, and
   await add(below.price)
   await page.getByRole('button', { name: /Delete RELIANCE below/ }).first().click()
   await expect(page.getByRole('region', { name: 'Active alerts' }).getByRole('listitem')).toHaveCount(3)
+  const second = await context.newPage()
+  await freeze(second)
+  await second.goto('/#alerts')
+  await expect(second.getByRole('region', { name: 'Active alerts' }).getByRole('listitem')).toHaveCount(3)
   const ms = Math.ceil(Math.max(above.index, below.index) * 1000 / TICKS_PER_SECOND) + 30
-  await page.clock.runFor(ms)
-  await expect(page.locator('.toast-stack .toast')).toHaveCount(3)
-  await expect(page.getByRole('region', { name: 'Triggered alerts' }).getByRole('listitem')).toHaveCount(3)
-  await page.clock.runFor(3500)
-  await expect(page.locator('.toast-stack .toast')).toHaveCount(3)
+  const totalToasts = async () => (await page.locator('.toast-stack .toast').count()) + (await second.locator('.toast-stack .toast').count())
+  await Promise.all([page.clock.runFor(ms), second.clock.runFor(ms)])
+  await expect.poll(totalToasts).toBe(3)
+  for (const tab of [page, second]) await expect(tab.getByRole('region', { name: 'Triggered alerts' }).getByRole('listitem')).toHaveCount(3)
+  await Promise.all([page.clock.runFor(3500), second.clock.runFor(3500)])
+  await expect.poll(totalToasts).toBe(3)
   await page.reload()
   await expect(page.getByRole('region', { name: 'Triggered alerts' }).getByRole('listitem')).toHaveCount(3)
   await page.clock.runFor(1500)

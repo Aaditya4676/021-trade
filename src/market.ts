@@ -94,18 +94,29 @@ export class MarketFeed {
   advance(now: number) {
     const end = this.indexAt(now)
     if (end <= this.cursor) return
+    const catchingUp = end - this.cursor > STOCK_COUNT * 2
     const start = Math.max(this.cursor + 1, end - MAX_CATCHUP_TICKS + 1)
     const ticks: Tick[] = []
     const next = { ...this.quotes }
     const changed = new Set<Symbol>()
-    for (let index = start; index <= end; index++) {
+    if (catchingUp) {
+      const latest = this.snapshot(end)
+      for (const { symbol } of STOCKS) {
+        const move = Math.sign(latest[symbol].price - next[symbol].price) as Quote['move']
+        if (!move) continue
+        next[symbol] = { ...latest[symbol], move }
+        changed.add(symbol)
+      }
+    }
+    const first = catchingUp && !this.tickListeners.size ? end + 1 : start
+    for (let index = first; index <= end; index++) {
       const stockIndex = (index % STOCK_COUNT + STOCK_COUNT) % STOCK_COUNT
       const stock = STOCKS[stockIndex]
       const previous = priceAt(stockIndex, index - STOCK_COUNT)
       const price = priceAt(stockIndex, index)
       if (price === previous) continue
       if (this.tickListeners.size) ticks.push({ symbol: stock.symbol, previous, price, index, time: this.epoch + index * INTERVAL })
-      if (index < end - STOCK_COUNT * 2) continue
+      if (catchingUp) continue
       const change = price - stock.close
       const move = price > next[stock.symbol].price ? 1 : price < next[stock.symbol].price ? -1 : 0
       next[stock.symbol] = { price, change, rate: change / stock.close * 100, move, index }

@@ -2,6 +2,8 @@
 
 021 Trade is a browser-only paper trading terminal for ten NSE equities. Each browser profile starts with ₹10,00,000 in simulated buying power. The terminal works without API keys, accounts, or a backend.
 
+[Live preview](https://aaditya4676.github.io/021-trade/) · [Walkthrough video](https://github.com/Aaditya4676/021-trade/releases/tag/v1.0.0)
+
 ## Run locally
 
 Use Node.js 22.13 or later and a current browser with IndexedDB and BroadcastChannel support.
@@ -43,7 +45,7 @@ npm run test:e2e
 npm run build
 ```
 
-The six unit tests cover exact arithmetic, invalid orders, idempotency, reordering, alert boundaries, and deterministic market throughput. Browser tests exercise watchlist management and cross-tab sync, order submission and reload, competing orders, simultaneous alerts, portfolio valuation and sorting, and mobile layout. In a four-second desktop Chromium scroll sample, the terminal rendered 237 changed prices at a 16.8 ms 95th-percentile frame interval.
+The six unit tests cover exact arithmetic, invalid orders, idempotency, reordering, alert boundaries, and deterministic market throughput. Six browser tests exercise watchlist management and cross-tab sync, order submission and reload, competing orders, simultaneous alerts, portfolio valuation and sorting, and mobile layout. In a four-second desktop Chromium scroll sample, the terminal rendered 238 changed prices at a 16.8 ms 95th-percentile frame interval.
 
 ## Limitations
 
