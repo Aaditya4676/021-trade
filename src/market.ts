@@ -39,13 +39,15 @@ export function priceAt(stockIndex: number, index: number): number {
 type Listener = () => void
 
 export class MarketFeed {
+  readonly epoch: number
   private cursor: number
   private quotes: Record<Symbol, Quote>
   private listeners = new Map<Symbol, Set<Listener>>()
   private allListeners = new Set<Listener>()
   private tickListeners = new Set<(ticks: Tick[]) => void>()
 
-  constructor(readonly epoch: number, now = Date.now()) {
+  constructor(epoch: number, now = Date.now()) {
+    this.epoch = epoch
     this.cursor = this.indexAt(now)
     this.quotes = this.snapshot(this.cursor)
   }

@@ -116,7 +116,7 @@ export function placeOrder(account: Account, request: Omit<Order, 'value'>): Acc
 
   return {
     ...account, holdings, cash: side === 'buy' ? account.cash - value : account.cash + value,
-    orders: [{ ...request, value }, ...account.orders],
+    orders: [{ ...request, value }, ...account.orders].sort((a, b) => b.time - a.time),
   }
 }
 
