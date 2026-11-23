@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.tmp/
+playwright-report/
+test-results/
+.env.local
+021_Trade_FE_Assignment.pdf
