@@ -113,13 +113,13 @@ export function App({ store }: { store: AccountStore }) {
   return <>
     <a className="skip-link" href="#main-content" onClick={event => { event.preventDefault(); document.getElementById('main-content')?.focus() }}>Skip to content</a>
     <header className="topbar"><div className="topbar-inner">
-      <a href="#terminal" className="brand" onClick={() => window.scrollTo(0, 0)}><span className="brand-mark"><CandlestickChart size={22} strokeWidth={2} /></span><span>021<span> Trade</span></span></a>
+      <a href="#terminal" className="brand" onClick={() => window.scrollTo(0, 0)}><span className="brand-mark"><CandlestickChart size={22} strokeWidth={2} /></span><span>Paper<span> Terminal</span></span></a>
       <nav aria-label="Workspace">{(Object.keys(PAGES) as Page[]).map(id => {
         const { icon: Icon, label } = PAGES[id]
         return <a key={id} href={`#${id}`} aria-current={page === id ? 'page' : undefined} onClick={() => window.scrollTo(0, 0)}><Icon size={16} />{label}</a>
       })}</nav>
       <div className="topbar-tools">
-        <div className="topbar-status"><span className="live-dot" /> Live simulation</div>
+        <div className="topbar-status"><span className="live-dot" /><span>Live<span className="status-detail"> simulation</span></span></div>
         <button type="button" className="icon-button theme-button" aria-label="Dark mode" aria-pressed={dark} title={dark ? 'Use light mode' : 'Use dark mode'} onClick={toggleTheme}>
           {dark ? <Sun size={17} /> : <Moon size={17} />}
         </button>
@@ -138,7 +138,7 @@ export function App({ store }: { store: AccountStore }) {
       {page === 'holdings' && <div className="split-layout"><Holdings holdings={account.holdings} feed={feed} openTicket={openTicket} showMarket={() => navigate('terminal')} />{ticket}</div>}
       {page === 'orders' && <Orders orders={account.orders} showMarket={() => navigate('terminal')} />}
       {page === 'alerts' && <Alerts alerts={account.alerts} store={store} feed={feed} />}
-      <footer className="footer"><span><Activity size={14} /> 021 Trade</span><span><Radio size={14} /> Simulated NSE market data</span></footer>
+      <footer className="footer"><span><Activity size={14} /> Paper Terminal</span><span><Radio size={14} /> Simulated NSE market data</span></footer>
     </main>
     <div className="toast-stack" aria-label="Notifications">{messages.map(message => <Notification key={message.id} message={message} dismiss={dismiss} />)}</div>
   </>

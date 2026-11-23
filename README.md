@@ -1,8 +1,8 @@
-# 021 Trade
+# Paper Terminal
 
-021 Trade is a browser-only paper trading terminal for ten NSE equities. Each browser profile starts with ₹10,00,000 in simulated buying power. The terminal works without API keys, accounts, or a backend.
+Paper Terminal is a browser-only trading simulator for ten NSE equities, built for the 021 Trade frontend take-home assignment. Each browser profile starts with ₹10,00,000 in simulated buying power. The terminal works without API keys, accounts, or a backend.
 
-[Live preview](https://aaditya4676.github.io/021-trade/) · [Walkthrough video](https://github.com/Aaditya4676/021-trade/releases/tag/v1.0.0)
+[Live preview](https://aaditya4676.github.io/021-trade/) · [Walkthrough video](https://github.com/Aaditya4676/021-trade/releases/latest)
 
 ## Run locally
 

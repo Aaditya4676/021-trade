@@ -315,6 +315,10 @@ tbody tr:has(button.table-symbol):hover, tbody tr:focus-within { background: var
   .toast-stack { right: 12px; bottom: 12px; }
 }
 
+@media (max-width: 375px) {
+  .topbar-status .status-detail { display: none; }
+}
+
 @media (max-width: 360px) {
   .topbar-inner { grid-template-columns: minmax(0, 1fr) auto; column-gap: 6px; }
   .topbar-tools { gap: 4px; }
