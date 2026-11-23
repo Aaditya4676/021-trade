@@ -59,10 +59,16 @@ export class MarketFeed {
 
   history(symbol: Symbol, seconds: number, count: number, end: number) {
     const stockIndex = STOCK_INDEX.get(symbol)!
-    return Array.from({ length: count }, (_, point) => {
-      const index = end - Math.round(seconds * TICKS_PER_SECOND * (1 - point / (count - 1)))
-      return { price: priceAt(stockIndex, index), time: this.epoch + index * INTERVAL }
-    })
+    const start = end - seconds * TICKS_PER_SECOND
+    const stride = Math.max(1, Math.round((end - start) / (count - 1)))
+    const sample = (index: number) => ({ price: priceAt(stockIndex, index), time: this.epoch + index * INTERVAL })
+    const points = [sample(start)]
+    // Keep completed samples at fixed times as the visible window advances.
+    for (let index = (Math.floor(start / stride) + 1) * stride; index < end; index += stride) {
+      points.push(sample(index))
+    }
+    points.push(sample(end))
+    return points
   }
 
   subscribe(symbol: Symbol, listener: Listener) {

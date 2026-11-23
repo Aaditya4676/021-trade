@@ -17,11 +17,13 @@ Open [the local terminal](http://127.0.0.1:5173). To verify the production bundl
 
 ## Features
 
+The header theme toggle follows the system appearance on first use and remembers your selection across reloads and tabs.
+
 | View | What you can do |
 | --- | --- |
 | Watchlists | Create, rename, or delete lists. Search the ten-stock picker, add and remove stocks, and drag rows by the handle. Tap a handle for Move up and Move down. To reorder with the keyboard, focus the handle, press Space or Enter, pick a destination with the arrow keys, and press Space or Enter to drop. Escape cancels. |
-| Market | View LTP, price change, and percentage change for all ten NSE symbols. Changed prices flash green for an uptick and red for a downtick. Select a stock to see its price history and open the ticket. |
-| Order ticket | Enter a whole-share market buy or sell. The ticket updates its estimate live, checks cash or available shares, and confirms the actual fill. Order history lists the newest fills first. |
+| Market | View LTP, price change, and percentage change for all ten NSE symbols. A brief green or red underline indicates tick direction, at most once per stock every 1.5 seconds. Reduced motion disables the cue. Select a stock to see its price history and open the ticket. The chart anchors historical samples to fixed times and updates the endpoint at the live price. |
+| Order ticket | Enter a whole-share market buy or sell. The ticket updates its estimate live, checks cash or available shares, and confirms the actual fill. Sell tickets compare the live price with weighted average buy price and show P&L for the selected shares. The fill receipt shows realized P&L. Order history lists the newest fills first. |
 | Holdings | See quantities, average cost, current value, and unrealized P&L. Sort by P&L, symbol, or value. Open a ticket from any holding. |
 | Price alerts | Set a one-time above or below threshold. All crossed alerts appear as individual toasts and move into Triggered alerts. Delete either active or triggered alerts. |
 
@@ -45,7 +47,7 @@ npm run test:e2e
 npm run build
 ```
 
-The six unit tests cover exact arithmetic, invalid orders, idempotency, reordering, alert boundaries, and deterministic market throughput. The browser tests build the production bundle and exercise watchlist management and cross-tab sync, order submission and reload, competing orders, simultaneous alerts, portfolio valuation and sorting, stale watchlist dialogs, touch reordering, and mobile keyboard navigation. GitHub Pages deploys this tested bundle after the checks pass. In a four-second desktop Chromium scroll sample, the terminal rendered 238 changed prices at a 16.8 ms 95th-percentile frame interval.
+The unit tests cover exact arithmetic, invalid orders, idempotency, reordering, alert boundaries, and deterministic market throughput. The browser tests build the production bundle and exercise watchlist management and cross-tab sync, order submission and reload, competing orders, simultaneous alerts, portfolio valuation and sorting, stale watchlist dialogs, touch reordering, and mobile keyboard navigation. GitHub Pages deploys this tested bundle after the checks pass. In a four-second desktop Chromium scroll sample, the terminal rendered 238 changed prices at a 16.8 ms 95th-percentile frame interval.
 
 ## Limitations
 

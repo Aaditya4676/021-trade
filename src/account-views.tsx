@@ -5,7 +5,7 @@ import { holdingValue, money, parseTarget, percent, pnlPercent, STOCKS } from '.
 import type { Account, Direction, Holding, Symbol } from './domain.ts'
 import type { MarketFeed } from './market.ts'
 import type { AccountStore } from './storage.ts'
-import { failureMessage, Flash, SymbolMark, timestamp, tone, useQuote } from './ui.tsx'
+import { failureMessage, SymbolMark, timestamp, tone, useQuote } from './ui.tsx'
 import type { OpenTicket } from './ui.tsx'
 
 type Sort = 'pnl' | 'symbol' | 'value'
@@ -16,7 +16,7 @@ const HoldingRow = memo(function HoldingRow({ symbol, holding, feed, openTicket 
   return <tr onClick={() => openTicket(symbol)}>
     <td><button type="button" className="table-symbol" aria-label={`Trade ${symbol} from holdings`}><SymbolMark symbol={symbol} /><strong>{symbol}</strong></button></td>
     <td className="numeric">{holding.quantity.toLocaleString('en-IN')}</td><td className="numeric">{money(average)}</td>
-    <td className="numeric"><Flash quote={quote}>{money(quote.price)}</Flash></td><td className="numeric strong">{money(value)}</td>
+    <td className="numeric">{money(quote.price)}</td><td className="numeric strong">{money(value)}</td>
     <td className={`numeric ${tone(pnl)}`}><strong>{money(pnl, { signed: true })}</strong><small className="cell-subtitle">{percent(rate)}</small></td>
   </tr>
 })
@@ -73,7 +73,7 @@ export function Holdings({ holdings, feed, openTicket, showMarket }: { holdings:
   return <div className="content-stack"><HoldingsSummary holdings={holdings} feed={feed} />
     <section className="panel" aria-labelledby="holdings-heading">
       <div className="panel-title"><div><h2 id="holdings-heading">Your positions</h2><p>{sorted.length} {sorted.length === 1 ? 'holding' : 'holdings'}</p></div></div>
-      {sorted.length ? <div className="table-scroll"><table className="data-table">
+      {sorted.length ? <div className="table-scroll"><table className="data-table holdings-table">
         <thead><tr>{sortHeader('symbol', 'Symbol')}<th scope="col" className="numeric">Qty</th><th scope="col" className="numeric">Average cost</th><th scope="col" className="numeric">Last price</th>{sortHeader('value', 'Current value', true)}{sortHeader('pnl', 'P&L', true)}</tr></thead>
         <tbody>{sorted.map(symbol => <HoldingRow key={symbol} symbol={symbol} holding={holdings[symbol]!} feed={feed} openTicket={openTicket} />)}</tbody>
       </table></div> : <div className="empty"><ChartNoAxesCombined size={29} /><h3>No open positions</h3><p>Buying a stock adds it to your portfolio.</p><button type="button" className="button secondary" onClick={showMarket}>Browse market</button></div>}
@@ -96,7 +96,7 @@ export function Orders({ orders, showMarket }: { orders: Account['orders']; show
 
 function AlertQuote({ feed, symbol }: { feed: MarketFeed; symbol: Symbol }) {
   const quote = useQuote(feed, symbol)
-  return <Flash key={symbol} quote={quote}>{money(quote.price)}</Flash>
+  return money(quote.price)
 }
 
 export function Alerts({ alerts, feed, store }: { alerts: Account['alerts']; feed: MarketFeed; store: AccountStore }) {

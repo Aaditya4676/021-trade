@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
-import { holdingValue, money, STARTING_CASH, STOCKS } from '../src/domain.ts'
+import { holdingValue, money, percent, STARTING_CASH, STOCKS } from '../src/domain.ts'
 import type { Account } from '../src/domain.ts'
 import { priceAt, TICKS_PER_SECOND } from '../src/market.ts'
 
@@ -113,8 +113,21 @@ test('validates orders, fills once at submit price, tracks holdings, and persist
   await ticket.getByRole('button', { name: 'Sell', exact: true }).click()
   await quantity.fill('4')
   await expect(ticket.getByRole('alert')).toHaveText('You can sell up to 3 shares.')
+  await expect(ticket.getByText('Estimated P&L')).toHaveCount(0)
   await quantity.fill('3')
+  await expect(ticket.getByText('Average buy price').locator('..').locator('dd')).toHaveText(money(bought.orders[0].price))
+  const position = bought.holdings.RELIANCE!
+  function pnlAt(price: number) {
+    const { pnl, rate } = holdingValue(position, price)
+    return `${money(pnl, { signed: true })} (${percent(rate)})`
+  }
+  const displayedPrice = await ticket.getByText('Live price', { exact: true }).locator('..').locator('dd').innerText()
+  await expect(ticket.getByText('Estimated P&L').locator('..').locator('dd')).toHaveText(pnlAt(Number(displayedPrice.replace(/\D/g, ''))))
   await ticket.getByRole('button', { name: 'Sell RELIANCE' }).click()
+  await expect(ticket.getByRole('heading', { name: 'Order filled' })).toBeVisible()
+  const sale = (await readAccount(page)).orders[0]
+  await expect(ticket.getByText('Realized P&L').locator('..').locator('dd')).toHaveText(pnlAt(sale.price))
+  await expect(ticket.getByText('Cost of shares sold').locator('..').locator('dd')).toHaveText(money(bought.orders[0].value))
   await expect(page.getByRole('heading', { name: 'No open positions' })).toBeVisible()
   await ticket.getByRole('button', { name: 'View order history' }).click()
   await page.reload()
@@ -307,4 +320,42 @@ test.describe('touch watchlist', () => {
     await page.keyboard.press('Tab')
     await expect(ticket.getByRole('button', { name: 'Buy', exact: true })).toBeFocused()
   })
+})
+
+test('remembers the theme and keeps header and live quote columns stable', async ({ page, context }) => {
+  await page.emulateMedia({ colorScheme: 'dark' })
+  await page.goto('/')
+  const toggle = page.getByRole('button', { name: 'Dark mode' })
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true')
+  const second = await context.newPage()
+  await second.goto('/')
+  await toggle.click()
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
+  await expect(second.locator('html')).toHaveAttribute('data-theme', 'light')
+  await page.reload()
+  await expect(toggle).toHaveAttribute('aria-pressed', 'false')
+  await toggle.focus()
+  await toggle.press('Space')
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true')
+  await page.evaluate(() => document.fonts.ready)
+  const widths = await page.locator('.market-panel tbody tr').first().evaluate(row => {
+    const price = row.querySelector('.flash')!
+    const measure = () => [...row.querySelectorAll('td')].map(cell => cell.getBoundingClientRect().width)
+    price.textContent = '₹999.99'
+    const before = measure()
+    price.textContent = '₹10,000.00'
+    return [before, measure()]
+  })
+  expect(widths[0]).toEqual(widths[1])
+  const nav = page.getByRole('navigation', { name: 'Workspace' })
+  const bounds = await nav.boundingBox()
+  for (const name of ['Holdings', 'Orders', 'Alerts']) {
+    await nav.getByRole('link', { name }).click()
+    await expect(nav.getByRole('link', { name })).toHaveAttribute('aria-current', 'page')
+    expect(await nav.boundingBox()).toEqual(bounds)
+  }
+  for (const width of [320, 390, 700]) {
+    await page.setViewportSize({ width, height: 844 })
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width)
+  }
 })

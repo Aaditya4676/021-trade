@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
-import { Activity, Bell, CandlestickChart, ClipboardList, LayoutGrid, Radio, ShieldAlert, Wallet, X } from 'lucide-react'
+import { Activity, Bell, CandlestickChart, ClipboardList, LayoutGrid, Moon, Sun, Radio, ShieldAlert, Wallet, X } from 'lucide-react'
 import { Alerts, Holdings, Orders } from './account-views.tsx'
 import { crossed, money } from './domain.ts'
 import type { Symbol } from './domain.ts'
@@ -7,6 +7,7 @@ import { Instrument, MarketTable } from './market-view.tsx'
 import { MarketFeed } from './market.ts'
 import type { Tick } from './market.ts'
 import type { AccountStore } from './storage.ts'
+import { useTheme } from './theme.ts'
 import { Ticket } from './ticket.tsx'
 import { failureMessage } from './ui.tsx'
 import type { ToastMessage } from './ui.tsx'
@@ -71,6 +72,7 @@ function Notification({ message, dismiss }: { message: ToastMessage; dismiss: (i
 }
 
 export function App({ store }: { store: AccountStore }) {
+  const { dark, toggleTheme } = useTheme()
   const account = useSyncExternalStore(store.subscribe, store.snapshot)!
   const feed = useMemo(() => new MarketFeed(account.marketEpoch), [account.marketEpoch])
   const page = useSyncExternalStore(subscribePage, getPage)
@@ -116,7 +118,12 @@ export function App({ store }: { store: AccountStore }) {
         const { icon: Icon, label } = PAGES[id]
         return <a key={id} href={`#${id}`} aria-current={page === id ? 'page' : undefined} onClick={() => window.scrollTo(0, 0)}><Icon size={16} />{label}</a>
       })}</nav>
-      <div className="topbar-status"><span className="live-dot" /> Live simulation</div>
+      <div className="topbar-tools">
+        <div className="topbar-status"><span className="live-dot" /> Live simulation</div>
+        <button type="button" className="icon-button theme-button" aria-label="Dark mode" aria-pressed={dark} title={dark ? 'Use light mode' : 'Use dark mode'} onClick={toggleTheme}>
+          {dark ? <Sun size={17} /> : <Moon size={17} />}
+        </button>
+      </div>
     </div></header>
 
     <main className="container" id="main-content" tabIndex={-1}>
@@ -125,7 +132,7 @@ export function App({ store }: { store: AccountStore }) {
       </header>
       {page === 'terminal' && <div className="terminal-layout">
         <Watchlists account={account} store={store} feed={feed} openTicket={openTicket} selected={symbol} />
-        <div className="content-stack terminal-center"><Instrument feed={feed} symbol={symbol} /><MarketTable feed={feed} selected={symbol} openTicket={openTicket} /></div>
+        <div className="content-stack terminal-center"><Instrument feed={feed} symbol={symbol} dark={dark} /><MarketTable feed={feed} selected={symbol} openTicket={openTicket} /></div>
         {ticket}
       </div>}
       {page === 'holdings' && <div className="split-layout"><Holdings holdings={account.holdings} feed={feed} openTicket={openTicket} showMarket={() => navigate('terminal')} />{ticket}</div>}

@@ -1,16 +1,25 @@
 import { useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { ArrowDownLeft, ArrowUpRight, Check, ChevronDown, CircleHelp, Minus, Plus } from 'lucide-react'
-import { money, orderError, OrderValidationError, parseQuantity, placeOrder, STOCKS } from './domain.ts'
-import type { Account, Order, Side, Symbol } from './domain.ts'
+import { averageCost, costOfShares, money, percent, pnlPercent, orderError, OrderValidationError, parseQuantity, placeOrder, STOCKS } from './domain.ts'
+import type { Account, Order, OrderRequest, Side, Symbol } from './domain.ts'
 import type { MarketFeed } from './market.ts'
 import type { AccountStore } from './storage.ts'
-import { failureMessage, Flash, useQuote } from './ui.tsx'
+import { failureMessage, tone, useQuote } from './ui.tsx'
 import type { OpenTicket } from './ui.tsx'
 
-function marketOrder(feed: MarketFeed, symbol: Symbol, side: Side, quantity: number): Omit<Order, 'value'> {
+function marketOrder(feed: MarketFeed, symbol: Symbol, side: Side, quantity: number): OrderRequest {
   const time = Date.now()
   return { id: crypto.randomUUID(), symbol, side, quantity, time, price: feed.currentPrice(symbol, time) }
+}
+
+function SaleResult({ proceeds, cost, filled = false }: { proceeds: bigint; cost: bigint; filled?: boolean }) {
+  const pnl = proceeds - cost
+  return <>
+    <div><dt>Cost of shares {filled ? 'sold' : 'to sell'}</dt><dd>{money(cost)}</dd></div>
+    <div><dt>{filled ? 'Realized' : 'Estimated'} P&amp;L</dt>
+      <dd className={tone(pnl)}>{money(pnl, { signed: true })} ({percent(pnlPercent(pnl, cost))})</dd></div>
+  </>
 }
 
 function focusConfirmation(element: HTMLHeadingElement | null) { element?.focus() }
@@ -27,7 +36,11 @@ export function Ticket({ account, store, feed, symbol, select, showOrders }: {
   const locked = useRef(false)
   const quote = useQuote(feed, symbol)
   const quantity = parseQuantity(raw)
-  const available = account.holdings[symbol]?.quantity ?? 0
+  const holding = account.holdings[symbol]
+  const available = holding?.quantity ?? 0
+  const value = quantity === null ? null : BigInt(quantity) * BigInt(quote.price)
+  const sellCost = side === 'sell' && holding && quantity !== null && quantity <= available
+    ? costOfShares(holding, quantity) : null
   const advisory = quantity === null ? 'Enter a positive whole number of shares.' : orderError(account, { symbol, side, quantity, price: quote.price })
   const visibleError = error || advisory
   const sideLabel = side === 'buy' ? 'Buy' : 'Sell'
@@ -69,7 +82,12 @@ export function Ticket({ account, store, feed, symbol, select, showOrders }: {
       <div className="confirmation-mark"><Check size={25} /></div>
       <h3 tabIndex={-1} ref={focusConfirmation}>Order filled</h3>
       <p>{confirmation.side === 'buy' ? 'Bought' : 'Sold'} {confirmation.quantity} {confirmation.quantity === 1 ? 'share' : 'shares'} of <strong>{confirmation.symbol}</strong>.</p>
-      <dl className="receipt"><div><dt>Execution price</dt><dd>{money(confirmation.price)}</dd></div><div><dt>Order value</dt><dd>{money(confirmation.value)}</dd></div></dl>
+      <dl className="receipt"><div><dt>Execution price</dt><dd>{money(confirmation.price)}</dd></div><div><dt>Order value</dt><dd>{money(confirmation.value)}</dd></div>
+        {confirmation.sale && <>
+          <div><dt>Average buy price</dt><dd>{money(confirmation.sale.averageBuyPrice)}</dd></div>
+          <SaleResult proceeds={confirmation.value} cost={confirmation.sale.costBasis} filled />
+        </>}
+      </dl>
       <button type="button" className="button primary full" onClick={showOrders}>View order history</button>
       <button type="button" className="button secondary full" onClick={newOrder}>New order</button>
     </div> : <form className="ticket-body" onSubmit={submit} noValidate>
@@ -85,9 +103,11 @@ export function Ticket({ account, store, feed, symbol, select, showOrders }: {
       {visibleError && <p className="inline-error" id="order-error" role="alert">{visibleError}</p>}
       {decline && !visibleError && <p role="status" className="ticket-note">{decline}</p>}
       <dl className="ticket-breakdown">
-        <div><dt>Live price</dt><dd><Flash quote={quote}>{money(quote.price)}</Flash></dd></div>
+        <div><dt>Live price</dt><dd>{money(quote.price)}</dd></div>
         <div><dt>{side === 'buy' ? 'Buying power' : 'Shares held'}</dt><dd>{side === 'buy' ? money(account.cash) : new Intl.NumberFormat('en-IN').format(available)}</dd></div>
-        <div className="estimated"><dt>Estimated value</dt><dd>{quantity === null ? '—' : money(BigInt(quantity) * BigInt(quote.price))}</dd></div>
+        {holding && <div><dt>Average buy price</dt><dd>{money(averageCost(holding))}</dd></div>}
+        <div className="estimated"><dt>Estimated value</dt><dd>{value === null ? '—' : money(value)}</dd></div>
+        {sellCost !== null && value !== null && <SaleResult proceeds={value} cost={sellCost} />}
       </dl>
       <button className={`button primary full ${side === 'sell' ? 'sell-submit' : ''}`} disabled={pending || Boolean(advisory)}>{pending ? 'Placing order…' : `${sideLabel} ${symbol}`}</button>
       <p className="ticket-note"><CircleHelp size={15} /><span>Fills at the live price when submitted. Paper funds only.</span></p>

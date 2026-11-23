@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { crossed, holdingValue, initialAccount, money, parseQuantity, parseTarget, placeOrder, reorder, STARTING_CASH } from '../src/domain.ts'
-import { MarketFeed, TICKS_PER_SECOND } from '../src/market.ts'
+import { MarketFeed, priceAt, TICKS_PER_SECOND } from '../src/market.ts'
 
 test('rejects invalid quantities and converts decimal targets to exact paise', () => {
   for (const input of ['', '0', '-1', '1.5', '1e2', 'Infinity', '9007199254740992']) assert.equal(parseQuantity(input), null)
@@ -24,8 +24,10 @@ test('maintains exact cash and remaining cost basis through buys and partial sel
   assert.equal(holdingValue(account.holdings.RELIANCE!, 120099).pnl, 292n)
   assert.equal(holdingValue(account.holdings.RELIANCE!, 120099).average, 120002n)
   account = placeOrder(account, { ...buy, id: 'third', side: 'sell', quantity: 1, price: 130000, time: 3 })
+  assert.equal(account.orders[0].sale?.costBasis, 120001n)
   assert.deepEqual(account.holdings.RELIANCE, { quantity: 2, cost: 240004n })
   account = placeOrder(account, { ...buy, id: 'fourth', side: 'sell', quantity: 2, price: 130001, time: 4 })
+  assert.equal(account.orders[0].sale?.costBasis, 240004n)
   assert.equal(account.holdings.RELIANCE, undefined)
   assert.equal(account.cash, STARTING_CASH + 29997n)
   assert.deepEqual(account.orders.map(order => order.id), ['fourth', 'third', 'second', 'first'])
@@ -80,4 +82,18 @@ test('produces a shared clock-driven stream at over 50 changing ticks per second
   first.advance(70_000)
   assert.equal(notifications, stoppedAt)
   assert.equal(first.quote('TCS').price, first.currentPrice('TCS', 70_000))
+})
+
+test('chart history retains completed samples as the live endpoint advances', () => {
+  const feed = new MarketFeed(0, 0)
+  for (const seconds of [60, 300, 900]) {
+    const before = feed.history('TCS', seconds, 100, 11)
+    for (const end of [21, 611]) {
+      const after = feed.history('TCS', seconds, 100, end)
+      const overlap = before.slice(1, -1).filter(point => point.time > after[0].time)
+      assert.ok(overlap.length > 50)
+      assert.deepEqual(after.filter(point => point.time >= overlap[0].time && point.time <= overlap.at(-1)!.time), overlap)
+      assert.equal(after.at(-1)?.price, priceAt(1, end))
+    }
+  }
 })

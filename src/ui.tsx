@@ -17,17 +17,22 @@ export function useQuote(feed: MarketFeed, symbol: Symbol) {
 
 export function Flash({ quote, children }: { quote: Quote; children: ReactNode }) {
   const element = useRef<HTMLSpanElement>(null)
-  const previous = useRef(quote)
+  const previousIndex = useRef(quote.index)
+  const lastCue = useRef(-Infinity)
   useLayoutEffect(() => {
-    const last = previous.current
-    previous.current = quote
-    if (!element.current || last.index === quote.index || !quote.move || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    const changed = previousIndex.current !== quote.index
+    previousIndex.current = quote.index
+    const now = performance.now()
+    if (!changed || !quote.move || !element.current || now - lastCue.current < 1500) return
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    lastCue.current = now
     const color = quote.move > 0 ? 'var(--green)' : 'var(--red)'
-    const animation = element.current.animate(
-      [{ backgroundColor: `color-mix(in srgb, ${color} 24%, transparent)`, color }, { backgroundColor: 'transparent' }],
-      { duration: 160, easing: 'ease-out' },
-    )
-    return () => animation.cancel()
+    const underline = `inset 0 -1px color-mix(in srgb, ${color} 55%, transparent)`
+    element.current.animate([
+      { boxShadow: 'inset 0 -1px transparent' },
+      { boxShadow: underline, offset: 0.3 },
+      { boxShadow: 'inset 0 -1px transparent' },
+    ], { duration: 420, easing: 'ease-in-out' })
   }, [quote])
   return <span className="flash" ref={element}>{children}</span>
 }

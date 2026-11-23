@@ -9,7 +9,7 @@ import type { OpenTicket } from './ui.tsx'
 const RANGES = [{ label: '1m', seconds: 60 }, { label: '5m', seconds: 300 }, { label: '15m', seconds: 900 }] as const
 const chartTime = new Intl.DateTimeFormat('en-IN', { timeZone: 'Asia/Kolkata', hourCycle: 'h23', hour: '2-digit', minute: '2-digit', second: '2-digit' })
 
-function drawChart(canvas: HTMLCanvasElement, points: { price: number; time: number }[], pointer: number | null) {
+function drawChart(canvas: HTMLCanvasElement, points: { price: number; time: number }[], pointer: number | null, dark: boolean) {
   const width = canvas.clientWidth
   const height = canvas.clientHeight
   const dpi = window.devicePixelRatio || 1
@@ -25,18 +25,23 @@ function drawChart(canvas: HTMLCanvasElement, points: { price: number; time: num
   const right = width - 66
   const top = 10
   const bottom = height - 25
-  const minimum = Math.min(...points.map(point => point.price))
-  const maximum = Math.max(...points.map(point => point.price))
+  const completed = points.slice(1, -1).map(point => point.price)
+  const minimum = Math.min(...completed)
+  const maximum = Math.max(...completed)
   const padding = Math.max(20, Math.round((maximum - minimum) * 0.16))
-  const low = minimum - padding
-  const high = maximum + padding
-  const x = (index: number) => left + index / (points.length - 1) * (right - left)
+  const firstPrice = points[0].price
+  const lastPrice = points[points.length - 1].price
+  const low = Math.min(minimum - padding, firstPrice, lastPrice)
+  const high = Math.max(maximum + padding, firstPrice, lastPrice)
+  const start = points[0].time
+  const end = points[points.length - 1].time
+  const x = (time: number) => left + (time - start) / (end - start) * (right - left)
   const y = (price: number) => bottom - (price - low) / (high - low) * (bottom - top)
 
   context.font = '11px Manrope, sans-serif'
   context.lineWidth = 1
-  context.fillStyle = '#66716d'
-  context.strokeStyle = '#e9ede8'
+  context.fillStyle = dark ? '#a8b9b1' : '#66716d'
+  context.strokeStyle = dark ? '#34453d' : '#e9ede8'
   context.textAlign = 'left'
   for (let row = 0; row <= 4; row++) {
     const axisY = top + (bottom - top) * row / 4
@@ -48,19 +53,19 @@ function drawChart(canvas: HTMLCanvasElement, points: { price: number; time: num
   }
   const divisions = width < 420 ? 3 : 5
   for (let column = 0; column <= divisions; column++) {
-    const index = Math.round((points.length - 1) * column / divisions)
-    const axisX = x(index)
+    const time = start + (end - start) * column / divisions
+    const axisX = x(time)
     context.beginPath()
     context.moveTo(axisX, top)
     context.lineTo(axisX, bottom)
     context.stroke()
     context.textAlign = column === 0 ? 'left' : column === divisions ? 'right' : 'center'
-    context.fillText(chartTime.format(points[index].time), axisX, height - 6)
+    context.fillText(chartTime.format(time), axisX, height - 6)
   }
 
   const line = new Path2D()
   line.moveTo(left, y(points[0].price))
-  points.slice(1).forEach((point, index) => line.lineTo(x(index + 1), y(point.price)))
+  for (const point of points.slice(1)) line.lineTo(x(point.time), y(point.price))
   const area = new Path2D(line)
   area.lineTo(right, bottom)
   area.lineTo(left, bottom)
@@ -70,14 +75,14 @@ function drawChart(canvas: HTMLCanvasElement, points: { price: number; time: num
   fill.addColorStop(1, 'rgba(34, 140, 106, .025)')
   context.fillStyle = fill
   context.fill(area)
-  context.strokeStyle = '#198762'
+  context.strokeStyle = dark ? '#7ccfa7' : '#198762'
   context.lineWidth = 1.85
   context.lineJoin = 'round'
   context.stroke(line)
 
-  const pointIndex = pointer === null ? points.length - 1 : Math.min(points.length - 1, Math.max(0, Math.round((pointer - left) / (right - left) * (points.length - 1))))
-  const point = points[pointIndex]
-  const pointX = x(pointIndex)
+  const point = pointer === null ? points[points.length - 1] : points.reduce((nearest, sample) =>
+    Math.abs(x(sample.time) - pointer) < Math.abs(x(nearest.time) - pointer) ? sample : nearest)
+  const pointX = x(point.time)
   const pointY = y(point.price)
   if (pointer !== null) {
     context.strokeStyle = '#899b92'
@@ -89,7 +94,7 @@ function drawChart(canvas: HTMLCanvasElement, points: { price: number; time: num
     context.stroke()
     context.setLineDash([])
   }
-  context.fillStyle = '#198762'
+  context.fillStyle = dark ? '#7ccfa7' : '#198762'
   context.beginPath()
   context.arc(pointX, pointY, 3.5, 0, 2 * Math.PI)
   context.fill()
@@ -107,13 +112,13 @@ function drawChart(canvas: HTMLCanvasElement, points: { price: number; time: num
   }
 }
 
-function PriceChart({ feed, symbol, quote, seconds }: { feed: MarketFeed; symbol: Symbol; quote: Quote; seconds: number }) {
+function PriceChart({ feed, symbol, quote, seconds, dark }: { feed: MarketFeed; symbol: Symbol; quote: Quote; seconds: number; dark: boolean }) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const pointer = useRef<number | null>(null)
   const points = useRef<{ price: number; time: number }[]>([])
   useLayoutEffect(() => {
     const element = canvas.current!
-    const paint = () => { if (points.current.length) drawChart(element, points.current, pointer.current) }
+    const paint = () => { if (points.current.length) drawChart(element, points.current, pointer.current, dark) }
     const track = (event: PointerEvent) => { pointer.current = event.offsetX; paint() }
     const reset = () => { pointer.current = null; paint() }
     const resize = new ResizeObserver(paint)
@@ -125,15 +130,15 @@ function PriceChart({ feed, symbol, quote, seconds }: { feed: MarketFeed; symbol
       element.removeEventListener('pointermove', track)
       element.removeEventListener('pointerleave', reset)
     }
-  }, [])
+  }, [dark])
   useLayoutEffect(() => {
     points.current = feed.history(symbol, seconds, 100, quote.index)
-    drawChart(canvas.current!, points.current, pointer.current)
-  }, [feed, symbol, seconds, quote.index])
+    drawChart(canvas.current!, points.current, pointer.current, dark)
+  }, [feed, symbol, seconds, quote.index, dark])
   return <canvas className="price-chart" ref={canvas} role="img" aria-label={`${symbol} price trend over the last ${seconds / 60} minutes. Current price ${money(quote.price)}.`} />
 }
 
-export function Instrument({ feed, symbol }: { feed: MarketFeed; symbol: Symbol }) {
+export function Instrument({ feed, symbol, dark }: { feed: MarketFeed; symbol: Symbol; dark: boolean }) {
   const [seconds, setSeconds] = useState<number>(60)
   const quote = useQuote(feed, symbol)
   const stock = STOCK_BY_SYMBOL[symbol]
@@ -141,12 +146,12 @@ export function Instrument({ feed, symbol }: { feed: MarketFeed; symbol: Symbol 
   return <section className="panel instrument" aria-label="Instrument chart">
     <div className="instrument-head"><div className="instrument-id"><SymbolMark symbol={symbol} large /><div><h2>{symbol}</h2><p>{stock.name} <span>·</span> NSE</p></div></div><span className="instrument-kind">Equity</span></div>
     <div className="instrument-details">
-      <div className="instrument-value"><strong><Flash key={symbol} quote={quote}>{money(quote.price)}</Flash></strong><span className={`move-badge ${tone(quote.change)}`}><Move size={14} />{percent(quote.rate)}</span></div>
+      <div className="instrument-value"><strong>{money(quote.price)}</strong><span className={`move-badge ${tone(quote.change)}`}><Move size={14} />{percent(quote.rate)}</span></div>
       <div className="segmented chart-ranges" role="group" aria-label="Chart period">
         {RANGES.map(range => <button type="button" key={range.label} aria-pressed={seconds === range.seconds} onClick={() => setSeconds(range.seconds)}>{range.label}</button>)}
       </div>
     </div>
-    <div className="chart-wrap"><PriceChart feed={feed} symbol={symbol} quote={quote} seconds={seconds} /></div>
+    <div className="chart-wrap"><PriceChart feed={feed} symbol={symbol} quote={quote} seconds={seconds} dark={dark} /></div>
   </section>
 }
 

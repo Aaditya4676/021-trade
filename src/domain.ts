@@ -21,7 +21,8 @@ export const STARTING_CASH = 100_000_000n
 
 export interface Watchlist { id: string; name: string; symbols: Symbol[] }
 export interface Holding { quantity: number; cost: bigint }
-export interface Order { id: string; symbol: Symbol; side: Side; quantity: number; price: number; value: bigint; time: number }
+export interface Order { id: string; symbol: Symbol; side: Side; quantity: number; price: number; value: bigint; time: number; sale?: { costBasis: bigint; averageBuyPrice: bigint } }
+export type OrderRequest = Omit<Order, 'value' | 'sale'>
 export interface Alert {
   id: string
   symbol: Symbol
@@ -98,27 +99,37 @@ export function orderError(account: Account, request: Pick<Order, 'symbol' | 'si
 
 export class OrderValidationError extends Error {}
 
-export function placeOrder(account: Account, request: Omit<Order, 'value'>): Account {
+export function averageCost(holding: Holding): bigint {
+  const quantity = BigInt(holding.quantity)
+  return (holding.cost + quantity / 2n) / quantity
+}
+
+export function costOfShares(holding: Holding, quantity: number): bigint {
+  return holding.cost * BigInt(quantity) / BigInt(holding.quantity)
+}
+
+export function placeOrder(account: Account, request: OrderRequest): Account {
   if (account.orders.some(order => order.id === request.id)) return account
   const error = orderError(account, request)
   if (error) throw new OrderValidationError(error)
 
   const { symbol, side, quantity, price } = request
   const value = BigInt(quantity) * BigInt(price)
+  const order: Order = { ...request, value }
   const old = account.holdings[symbol] ?? { quantity: 0, cost: 0n }
   const holdings = { ...account.holdings }
   if (side === 'buy') {
     holdings[symbol] = { quantity: old.quantity + quantity, cost: old.cost + value }
-  } else if (quantity === old.quantity) {
-    delete holdings[symbol]
   } else {
-    const costSold = (old.cost * BigInt(quantity)) / BigInt(old.quantity)
-    holdings[symbol] = { quantity: old.quantity - quantity, cost: old.cost - costSold }
+    const costBasis = costOfShares(old, quantity)
+    order.sale = { costBasis, averageBuyPrice: averageCost(old) }
+    if (quantity === old.quantity) delete holdings[symbol]
+    else holdings[symbol] = { quantity: old.quantity - quantity, cost: old.cost - costBasis }
   }
 
   return {
     ...account, holdings, cash: side === 'buy' ? account.cash - value : account.cash + value,
-    orders: [{ ...request, value }, ...account.orders].sort((a, b) => b.time - a.time),
+    orders: [order, ...account.orders].sort((a, b) => b.time - a.time),
   }
 }
 
@@ -126,7 +137,7 @@ export function holdingValue(holding: Holding, price: number) {
   const quantity = BigInt(holding.quantity)
   const value = quantity * BigInt(price)
   const pnl = value - holding.cost
-  return { value, pnl, rate: pnlPercent(pnl, holding.cost), average: (holding.cost + quantity / 2n) / quantity }
+  return { value, pnl, rate: pnlPercent(pnl, holding.cost), average: averageCost(holding) }
 }
 
 export function reorder(symbols: Symbol[], source: Symbol, destination: Symbol): Symbol[] {

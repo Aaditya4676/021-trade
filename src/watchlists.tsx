@@ -5,13 +5,13 @@ import { money, percent, reorder, STOCKS } from './domain.ts'
 import type { Account, Symbol, Watchlist } from './domain.ts'
 import type { MarketFeed } from './market.ts'
 import type { AccountStore } from './storage.ts'
-import { Dialog, failureMessage, Flash, tone, useQuote } from './ui.tsx'
+import { Dialog, failureMessage, tone, useQuote } from './ui.tsx'
 import type { OpenTicket } from './ui.tsx'
 
 const WatchPrice = memo(function WatchPrice({ feed, symbol }: { feed: MarketFeed; symbol: Symbol }) {
   const quote = useQuote(feed, symbol)
   return <>
-    <span className="watch-price"><Flash quote={quote}>{money(quote.price, { currency: false })}</Flash></span>
+    <span className="watch-price">{money(quote.price, { currency: false })}</span>
     <span className={`watch-change ${tone(quote.change)}`}>
       <span>{money(quote.change, { signed: true, currency: false })}</span><span>{percent(quote.rate)}</span>
     </span>
@@ -48,7 +48,6 @@ export function Watchlists({ account, store, feed, openTicket, selected }: {
   // Resolve a deleted selection before a gesture can continue on the fallback list.
   if (activeId !== (active?.id ?? '')) changeList(active?.id ?? '')
 
-  // A remote commit may remove the target while a modal is open.
   if (dialog && dialog.mode !== 'create' && !dialogList) {
     setDialog(null)
     if (!(dialog.mode === 'delete' && busy)) setError(deletedMessage)
