@@ -96,10 +96,12 @@ export function orderError(account: Account, request: Pick<Order, 'symbol' | 'si
   return null
 }
 
+export class OrderValidationError extends Error {}
+
 export function placeOrder(account: Account, request: Omit<Order, 'value'>): Account {
   if (account.orders.some(order => order.id === request.id)) return account
   const error = orderError(account, request)
-  if (error) throw new Error(error)
+  if (error) throw new OrderValidationError(error)
 
   const { symbol, side, quantity, price } = request
   const value = BigInt(quantity) * BigInt(price)

@@ -245,6 +245,11 @@ tbody tr:has(button.table-symbol):hover, tbody tr:focus-within { background: #f2
   .market-panel td:last-child, .market-panel th:last-child { padding-right: 13px; }
 }
 
+@media (pointer: coarse) {
+  .grip { min-width: 44px; }
+  .dialog-actions .button { min-height: 44px; }
+}
+
 @media (max-width: 960px) {
   .terminal-layout { grid-template-columns: minmax(215px, 34%) minmax(0, 1fr); }
   .terminal-center { grid-column: 2; grid-row: 1 / span 2; }

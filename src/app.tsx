@@ -97,6 +97,7 @@ export function App({ store }: { store: AccountStore }) {
     setTicketVersion(version => version + 1)
     window.requestAnimationFrame(() => {
       if (window.matchMedia('(max-width: 960px)').matches) {
+        document.getElementById('ticket-heading')?.focus({ preventScroll: true })
         document.getElementById('trade-ticket')?.scrollIntoView({ block: 'start' })
       } else {
         document.getElementById('order-quantity')?.focus({ preventScroll: true })

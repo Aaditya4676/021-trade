@@ -81,7 +81,7 @@ test('validates orders, fills once at submit price, tracks holdings, and persist
   const ticket = page.locator('#trade-ticket')
   const quantity = ticket.getByLabel('Quantity', { exact: true })
   const buy = ticket.getByRole('button', { name: 'Buy RELIANCE' })
-  for (const input of ['0', '-1', '1.5']) {
+  for (const input of ['', '0', '-1', '1.5']) {
     await quantity.fill(input)
     await expect(ticket.getByRole('alert')).toHaveText('Enter a positive whole number of shares.')
     await expect(buy).toBeDisabled()
@@ -144,6 +144,14 @@ test('serializes competing orders from two tabs against the same balance', async
   const account = await readAccount(page)
   expect(account.cash).toBe(STARTING_CASH - account.orders[0].value)
   for (const tab of [page, second]) await expect(tab.locator('.cash-pill dd')).toHaveText(money(account.cash))
+  const losingTab = await page.locator('.receipt').count() ? second : page
+  const ticket = losingTab.locator('#trade-ticket')
+  await ticket.getByLabel('Stock').selectOption('ITC')
+  await expect(ticket.getByRole('alert')).toHaveCount(0)
+  await expect(ticket.getByText(/declined/)).toHaveCount(0)
+  await ticket.getByRole('button', { name: 'Buy ITC' }).click()
+  await expect(ticket.getByRole('heading', { name: 'Order filled' })).toBeVisible()
+  expect((await readAccount(losingTab)).orders).toHaveLength(2)
 })
 
 test('fires simultaneous alerts once across tabs, suppresses deleted alerts, and persists triggered state', async ({ page, context }) => {
@@ -252,4 +260,51 @@ test('streams ten instruments smoothly while scrolling and fits a narrow viewpor
   await page.getByRole('button', { name: 'Trade INFY from watchlist' }).click()
   await expect(page.locator('#trade-ticket').getByLabel('Stock')).toHaveValue('INFY')
   await expect(page.getByRole('heading', { name: 'Order ticket' })).toBeInViewport()
+})
+
+test('closes dialogs whose watchlist is deleted in another tab', async ({ page, context }) => {
+  await page.goto('/')
+  const other = await context.newPage()
+  await other.goto('/')
+  const original = (await readAccount(page)).watchlists
+  for (const action of ['Rename watchlist', 'Add stocks', 'Delete watchlist']) {
+    await page.getByRole('button', { name: 'New watchlist' }).click()
+    await page.getByLabel('Watchlist name').fill('Banks')
+    await page.getByRole('button', { name: 'Create watchlist' }).click()
+    await expect(page.getByText('No stocks yet')).toBeVisible()
+    await other.getByLabel('Active watchlist').selectOption({ label: 'Banks' })
+    await page.getByRole('button', { name: action }).click()
+    await expect(page.getByRole('dialog')).toBeVisible()
+    await other.getByRole('button', { name: 'Delete watchlist' }).click()
+    await other.getByRole('dialog').getByRole('button', { name: 'Delete watchlist' }).click()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await expect(page.getByRole('alert')).toHaveText('This watchlist was deleted in another tab.')
+    expect((await readAccount(page)).watchlists).toEqual(original)
+    await expect(other.getByRole('alert')).toHaveCount(0)
+  }
+})
+
+test.describe('touch watchlist', () => {
+  test.use({ hasTouch: true, viewport: { width: 390, height: 844 } })
+
+  test('reorders by tap and keeps keyboard navigation inside the opened ticket', async ({ page }) => {
+    await page.goto('/')
+    await page.getByRole('button', { name: 'Reorder RELIANCE' }).tap()
+    const dialog = page.getByRole('dialog', { name: 'Reorder stock' })
+    await expect(dialog.getByRole('button', { name: 'Move up' })).toBeDisabled()
+    await dialog.getByRole('button', { name: 'Move down' }).tap()
+    await expect(dialog.getByRole('status')).toContainText('Position 2 of 5')
+    await dialog.getByRole('button', { name: 'Move up' }).tap()
+    await expect(dialog.getByRole('status')).toContainText('Position 1 of 5')
+    await dialog.getByRole('button', { name: 'Move down' }).tap()
+    await dialog.getByRole('button', { name: 'Done' }).tap()
+    await page.reload()
+    await expect(page.locator('.watch-symbol')).toHaveText(['TCS', 'RELIANCE', 'INFY', 'HDFCBANK', 'ICICIBANK'])
+    await page.getByRole('button', { name: 'Trade INFY from watchlist' }).press('Enter')
+    const ticket = page.locator('#trade-ticket')
+    await expect(ticket.getByRole('heading', { name: 'Order ticket' })).toBeFocused()
+    await expect(ticket.getByLabel('Stock')).toHaveValue('INFY')
+    await page.keyboard.press('Tab')
+    await expect(ticket.getByRole('button', { name: 'Buy', exact: true })).toBeFocused()
+  })
 })

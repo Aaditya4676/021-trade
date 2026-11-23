@@ -18,13 +18,18 @@ const WatchPrice = memo(function WatchPrice({ feed, symbol }: { feed: MarketFeed
   </>
 })
 
-type DialogMode = 'create' | 'rename' | 'delete' | 'picker'
+type ListDialog =
+  | { mode: 'create' }
+  | { mode: 'rename' | 'delete' | 'picker'; listId: string }
+  | { mode: 'reorder'; listId: string; symbol: Symbol }
+
+const deletedMessage = 'This watchlist was deleted in another tab.'
 
 export function Watchlists({ account, store, feed, openTicket, selected }: {
   account: Account; store: AccountStore; feed: MarketFeed; openTicket: OpenTicket; selected: Symbol
 }) {
   const [activeId, setActiveId] = useState('core')
-  const [dialog, setDialog] = useState<DialogMode | null>(null)
+  const [dialog, setDialog] = useState<ListDialog | null>(null)
   const [name, setName] = useState('')
   const [query, setQuery] = useState('')
   const [error, setError] = useState('')
@@ -35,17 +40,37 @@ export function Watchlists({ account, store, feed, openTicket, selected }: {
   const [announcement, setAnnouncement] = useState('')
   const active = account.watchlists.find(list => list.id === activeId) ?? account.watchlists[0]
 
+  const dialogList = dialog && dialog.mode !== 'create'
+    ? account.watchlists.find(list => list.id === dialog.listId)
+    : undefined
+  const position = dialog?.mode === 'reorder' ? dialogList?.symbols.indexOf(dialog.symbol) ?? -1 : -1
+
+  // Resolve a deleted selection before a gesture can continue on the fallback list.
+  if (activeId !== (active?.id ?? '')) changeList(active?.id ?? '')
+
+  // A remote commit may remove the target while a modal is open.
+  if (dialog && dialog.mode !== 'create' && !dialogList) {
+    setDialog(null)
+    if (!(dialog.mode === 'delete' && busy)) setError(deletedMessage)
+  } else if (dialog?.mode === 'reorder' && position < 0) {
+    setDialog(null)
+    setError('This stock was removed from the watchlist.')
+  }
+
   function changeList(id: string) {
     setActiveId(id)
+    setDragging(null)
+    setDropTarget(null)
     setKeyboard(null)
     setError('')
   }
 
-  function openDialog(mode: DialogMode) {
+  function openDialog(mode: 'create' | 'rename' | 'delete' | 'picker') {
     setError('')
     setQuery('')
     setName(mode === 'rename' ? active?.name ?? '' : '')
-    setDialog(mode)
+    if (mode === 'create') setDialog({ mode })
+    else if (active) setDialog({ mode, listId: active.id })
   }
 
   async function updateList(id: string, update: (list: Watchlist) => Watchlist) {
@@ -53,7 +78,7 @@ export function Watchlists({ account, store, feed, openTicket, selected }: {
     try {
       await store.mutate(current => {
         const list = current.watchlists.find(item => item.id === id)
-        if (!list) throw new Error('This watchlist was deleted in another tab.')
+        if (!list) throw new Error(deletedMessage)
         const next = update(list)
         if (list === next) return current
         return { ...current, watchlists: current.watchlists.map(item => item.id === id ? next : item) }
@@ -66,16 +91,16 @@ export function Watchlists({ account, store, feed, openTicket, selected }: {
     if (busy) return
     const trimmed = name.trim()
     if (!trimmed) { setError('Enter a name for this watchlist.'); return }
-    const id = dialog === 'create' ? crypto.randomUUID() : active?.id
-    if (!id) return
+    if (dialog?.mode !== 'rename' && dialog?.mode !== 'create') return
+    const id = dialog.mode === 'create' ? crypto.randomUUID() : dialog.listId
     setBusy(true)
     try {
       await store.mutate(current => {
         if (current.watchlists.some(item => item.id !== id && item.name.toLowerCase() === trimmed.toLowerCase())) {
           throw new Error('A watchlist with that name already exists.')
         }
-        if (dialog === 'create') return { ...current, watchlists: [...current.watchlists, { id, name: trimmed, symbols: [] }] }
-        if (!current.watchlists.some(item => item.id === id)) throw new Error('This watchlist was deleted in another tab.')
+        if (dialog.mode === 'create') return { ...current, watchlists: [...current.watchlists, { id, name: trimmed, symbols: [] }] }
+        if (!current.watchlists.some(item => item.id === id)) throw new Error(deletedMessage)
         return { ...current, watchlists: current.watchlists.map(item => item.id === id ? { ...item, name: trimmed } : item) }
       })
       changeList(id)
@@ -85,10 +110,13 @@ export function Watchlists({ account, store, feed, openTicket, selected }: {
   }
 
   async function deleteList() {
-    if (!active || busy) return
+    if (dialog?.mode !== 'delete' || busy) return
     setBusy(true)
     try {
-      await store.mutate(current => ({ ...current, watchlists: current.watchlists.filter(item => item.id !== active.id) }))
+      await store.mutate(current => {
+        if (!current.watchlists.some(list => list.id === dialog.listId)) throw new Error(deletedMessage)
+        return { ...current, watchlists: current.watchlists.filter(list => list.id !== dialog.listId) }
+      })
       setDialog(null)
     } catch (error) { setError(failureMessage(error)) }
     finally { setBusy(false) }
@@ -99,6 +127,16 @@ export function Watchlists({ account, store, feed, openTicket, selected }: {
     void updateList(active.id, list => {
       const symbols = reorder(list.symbols, source, destination)
       return symbols === list.symbols ? list : { ...list, symbols }
+    })
+  }
+
+  function moveOneStep(offset: -1 | 1) {
+    if (dialog?.mode !== 'reorder') return
+    void updateList(dialog.listId, list => {
+      const from = list.symbols.indexOf(dialog.symbol)
+      const destination = list.symbols[from + offset]
+      if (from < 0 || !destination) return list
+      return { ...list, symbols: reorder(list.symbols, dialog.symbol, destination) }
     })
   }
 
@@ -142,7 +180,8 @@ export function Watchlists({ account, store, feed, openTicket, selected }: {
           className={`watch-row${selected === symbol ? ' selected' : ''}${(dropTarget === symbol && dragging !== symbol) || (keyboard?.target === symbol && keyboard.source !== symbol) ? ' drag-target' : ''}`}
           onDragOver={event => { if (dragging) { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; setDropTarget(symbol) } }}
           onDrop={event => { event.preventDefault(); if (dragging) move(dragging, symbol); setDragging(null); setDropTarget(null) }}>
-          <button className="grip" type="button" draggable aria-label={`Reorder ${symbol}`} title="Drag, or press Space then use arrow keys" aria-pressed={keyboard?.source === symbol}
+          <button className="grip" type="button" draggable aria-label={`Reorder ${symbol}`} title="Tap for move options, drag, or press Space then use arrow keys" aria-pressed={keyboard?.source === symbol}
+            onClick={() => { setError(''); setDialog({ mode: 'reorder', listId: active.id, symbol }) }}
             onKeyDown={event => reorderKey(event, symbol)} onBlur={() => setKeyboard(null)}
             onDragStart={event => { event.dataTransfer.setData('text/plain', symbol); event.dataTransfer.effectAllowed = 'move'; setDragging(symbol) }}
             onDragEnd={() => { setDragging(null); setDropTarget(null) }}><GripVertical size={14} /></button>
@@ -159,24 +198,33 @@ export function Watchlists({ account, store, feed, openTicket, selected }: {
     <div className="watch-footer"><button type="button" className="button secondary full" onClick={() => openDialog(active ? 'picker' : 'create')}><Plus size={16} />{active ? 'Add stocks' : 'Create watchlist'}</button></div>
     <span className="sr-only" role="status">{announcement}</span>
 
-    {dialog && <Dialog title={{ create: 'New watchlist', rename: 'Rename watchlist', delete: 'Delete watchlist', picker: 'Add stocks' }[dialog]} close={() => { setDialog(null); setError('') }}>
-      {(dialog === 'create' || dialog === 'rename') && <form className="dialog-form" onSubmit={saveName}>
+    {dialog && <Dialog title={{ create: 'New watchlist', rename: 'Rename watchlist', delete: 'Delete watchlist', picker: 'Add stocks', reorder: 'Reorder stock' }[dialog.mode]} close={() => { setDialog(null); setError('') }}>
+      {(dialog.mode === 'create' || dialog.mode === 'rename') && <form className="dialog-form" onSubmit={saveName}>
         <label className="field">Watchlist name<input autoFocus value={name} maxLength={32} onChange={event => setName(event.target.value)} placeholder="e.g. Long-term ideas" /></label>
         {error && <p className="inline-error" role="alert">{error}</p>}
-        <button className="button primary full" disabled={busy}>{dialog === 'create' ? 'Create watchlist' : 'Save name'}</button>
+        <button className="button primary full" disabled={busy}>{dialog.mode === 'create' ? 'Create watchlist' : 'Save name'}</button>
       </form>}
-      {dialog === 'delete' && <div className="dialog-form">
-        <p>Delete <strong>{active?.name}</strong> and its stock list?</p>
+      {dialog.mode === 'delete' && <div className="dialog-form">
+        <p>Delete <strong>{dialogList?.name}</strong> and its stock list?</p>
         {error && <p className="inline-error" role="alert">{error}</p>}
         <div className="dialog-actions"><button type="button" className="button secondary" onClick={() => setDialog(null)}>Cancel</button><button type="button" className="button danger" disabled={busy} onClick={() => void deleteList()}>Delete watchlist</button></div>
       </div>}
-      {dialog === 'picker' && active && <div className="dialog-form picker">
+      {dialog.mode === 'reorder' && dialogList && <div className="dialog-form">
+        <p role="status"><strong>{dialog.symbol}</strong> · Position {position + 1} of {dialogList.symbols.length}</p>
+        <div className="dialog-actions">
+          <button type="button" className="button secondary" disabled={position <= 0} onClick={() => moveOneStep(-1)}>Move up</button>
+          <button type="button" className="button secondary" disabled={position >= dialogList.symbols.length - 1} onClick={() => moveOneStep(1)}>Move down</button>
+        </div>
+        {error && <p className="inline-error" role="alert">{error}</p>}
+        <button type="button" className="button primary full" onClick={() => setDialog(null)}>Done</button>
+      </div>}
+      {dialog.mode === 'picker' && dialogList && <div className="dialog-form picker">
         <label className="search-wrap"><Search size={17} /><input autoFocus aria-label="Find a stock" placeholder="Search symbol or company" value={query} onChange={event => setQuery(event.target.value)} /></label>
         {error && <p className="inline-error" role="alert">{error}</p>}
         <ul className="picker-list">
           {STOCKS.filter(stock => `${stock.symbol} ${stock.name}`.toLowerCase().includes(query.trim().toLowerCase())).map(stock => {
-            const added = active.symbols.includes(stock.symbol)
-            return <li key={stock.symbol}><div><strong>{stock.symbol}</strong><span>{stock.name}</span></div><button type="button" className="icon-button" disabled={added} aria-label={added ? `${stock.symbol} already added` : `Add ${stock.symbol}`} onClick={() => void updateList(active.id, list => list.symbols.includes(stock.symbol) ? list : { ...list, symbols: [...list.symbols, stock.symbol] })}>{added ? <Check size={17} /> : <Plus size={17} />}</button></li>
+            const added = dialogList.symbols.includes(stock.symbol)
+            return <li key={stock.symbol}><div><strong>{stock.symbol}</strong><span>{stock.name}</span></div><button type="button" className="icon-button" disabled={added} aria-label={added ? `${stock.symbol} already added` : `Add ${stock.symbol}`} onClick={() => void updateList(dialogList.id, list => list.symbols.includes(stock.symbol) ? list : { ...list, symbols: [...list.symbols, stock.symbol] })}>{added ? <Check size={17} /> : <Plus size={17} />}</button></li>
           })}
         </ul>
         {!STOCKS.some(stock => `${stock.symbol} ${stock.name}`.toLowerCase().includes(query.trim().toLowerCase())) && <p className="muted">No stocks match your search.</p>}
